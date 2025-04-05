@@ -15,7 +15,11 @@
     "update-foreign-keys": "node updateForeignKeys.js",
     "heroku-postbuild": "npm ci --only=production"
   },
-  "keywords": ["node", "express", "api"],
+  "keywords": [
+    "node",
+    "express",
+    "api"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
