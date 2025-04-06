@@ -1,23 +1,4 @@
 const morgan = require('morgan');
-const fs = require('fs');
-const path = require('path');
-
-// Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, '../logs');
-if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir);
-}
-
-// Create write streams
-const accessLogStream = fs.createWriteStream(
-    path.join(logsDir, 'access.log'),
-    { flags: 'a' }
-);
-
-const errorLogStream = fs.createWriteStream(
-    path.join(logsDir, 'error.log'),
-    { flags: 'a' }
-);
 
 // Custom token for request body
 morgan.token('body', (req) => {
@@ -45,15 +26,11 @@ const developmentFormat = ':method :url :status :response-time ms - :body - :res
 // Production format
 const productionFormat = ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"';
 
-// Create loggers
-const successLogger = morgan(process.env.NODE_ENV === 'production' ? productionFormat : developmentFormat, {
-    skip: (req, res) => res.statusCode >= 400,
-    stream: accessLogStream
-});
+// Create loggers using console output
+const successLogger = morgan(process.env.NODE_ENV === 'production' ? productionFormat : developmentFormat);
 
 const errorLogger = morgan(process.env.NODE_ENV === 'production' ? productionFormat : developmentFormat, {
-    skip: (req, res) => res.statusCode < 400,
-    stream: errorLogStream
+    skip: (req, res) => res.statusCode < 400
 });
 
 // Capture response body middleware

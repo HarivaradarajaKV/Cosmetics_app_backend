@@ -1,12 +1,4 @@
 const winston = require('winston');
-const path = require('path');
-const fs = require('fs');
-
-// Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, '../logs');
-if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
-}
 
 // Define log format
 const logFormat = winston.format.combine(
@@ -16,44 +8,20 @@ const logFormat = winston.format.combine(
     winston.format.json()
 );
 
-// Create separate loggers for different levels
+// Create logger with appropriate transports based on environment
 const logger = winston.createLogger({
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     format: logFormat,
     defaultMeta: { service: 'api-service' },
     transports: [
-        // Error logs
-        new winston.transports.File({
-            filename: path.join(logsDir, 'error.log'),
-            level: 'error',
-            maxsize: 5242880, // 5MB
-            maxFiles: 5,
-        }),
-        // Combined logs
-        new winston.transports.File({
-            filename: path.join(logsDir, 'combined.log'),
-            maxsize: 5242880, // 5MB
-            maxFiles: 5,
-        }),
-        // Debug logs
-        new winston.transports.File({
-            filename: path.join(logsDir, 'debug.log'),
-            level: 'debug',
-            maxsize: 5242880, // 5MB
-            maxFiles: 5,
+        new winston.transports.Console({
+            format: winston.format.combine(
+                winston.format.colorize(),
+                winston.format.simple()
+            )
         })
     ]
 });
-
-// Add console logging in development
-if (process.env.NODE_ENV !== 'production') {
-    logger.add(new winston.transports.Console({
-        format: winston.format.combine(
-            winston.format.colorize(),
-            winston.format.simple()
-        )
-    }));
-}
 
 // Create request logger
 const requestLogger = (req, res, next) => {
