@@ -1,7 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
 const pool = require('./db');
 const WebSocket = require('ws');
 const swaggerUi = require('swagger-ui-express');
@@ -46,33 +44,6 @@ app.use(cors({
     maxAge: 86400 // 24 hours
 }));
 
-// Basic rate limiting
-const requestCounts = new Map();
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_REQUESTS = 100; // per window per IP
-
-app.use((req, res, next) => {
-    const ip = req.ip;
-    const now = Date.now();
-    const windowStart = now - WINDOW_MS;
-    
-    if (!requestCounts.has(ip)) {
-        requestCounts.set(ip, []);
-    }
-    
-    const requests = requestCounts.get(ip);
-    const recentRequests = requests.filter(time => time > windowStart);
-    requests.push(now);
-    requestCounts.set(ip, recentRequests);
-    
-    if (recentRequests.length > MAX_REQUESTS) {
-        logger.warn('Rate limit exceeded', { ip, requestCount: recentRequests.length });
-        return res.error('Too many requests', 429);
-    }
-    
-    next();
-});
-
 // API Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     customCss: '.swagger-ui .topbar { display: none }',
@@ -92,28 +63,6 @@ app.get('/health', (req, res) => {
         uptime: process.uptime()
     });
 });
-
-// WebSocket connections store
-const clients = new Map();
-
-// Body parsing middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Health check endpoint for Railway - moved before database operations
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-// Ensure uploads directory exists
-const uploadDir = path.join(__dirname, 'uploads', 'profile-photos');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-    logger.info('Created uploads directory');
-}
-
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // API Routes
 const routes = {

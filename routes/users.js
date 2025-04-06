@@ -3,7 +3,7 @@ const pool = require('../db');
 const { auth } = require('../middleware/auth');
 const path = require('path');
 const fs = require('fs');
-const upload = require('../middleware/upload');
+const { upload, uploadToSupabase } = require('../middleware/upload');
 
 // Get user profile
 router.get('/profile', auth, async (req, res) => {
@@ -148,13 +148,9 @@ router.post('/profile/photo', auth, upload.single('photo'), async (req, res) => 
         }
 
         const userId = req.user.id;
-        const photoUrl = `${req.protocol}://${req.get('host')}/uploads/profile-photos/${req.file.filename}`;
 
-        // Get the old photo URL to delete the file later
-        const oldPhoto = await pool.query(
-            'SELECT photo_url FROM users WHERE id = $1',
-            [userId]
-        );
+        // Upload to Supabase Storage
+        const photoUrl = await uploadToSupabase(req.file);
 
         // Update user's photo_url in database
         const result = await pool.query(
@@ -164,17 +160,6 @@ router.post('/profile/photo', auth, upload.single('photo'), async (req, res) => 
 
         if (result.rows.length === 0) {
             throw new Error('User not found');
-        }
-
-        // Delete old photo file if it exists
-        if (oldPhoto.rows[0]?.photo_url) {
-            const oldPhotoPath = oldPhoto.rows[0].photo_url.split('/uploads/')[1];
-            if (oldPhotoPath) {
-                const fullPath = path.join('uploads', oldPhotoPath);
-                if (fs.existsSync(fullPath)) {
-                    fs.unlinkSync(fullPath);
-                }
-            }
         }
 
         res.json({ photo_url: result.rows[0].photo_url });
