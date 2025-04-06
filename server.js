@@ -171,7 +171,7 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5001;
-
+console.log(PORT);
 // Initialize WebSocket server
 const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info(`Server running on port ${PORT}`, {

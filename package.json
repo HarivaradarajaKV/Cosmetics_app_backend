@@ -13,7 +13,10 @@
     "build": "npm ci --only=production",
     "test": "echo 'No test specified' && exit 0",
     "update-foreign-keys": "node updateForeignKeys.js",
-    "heroku-postbuild": "npm ci --only=production"
+    "heroku-postbuild": "npm ci --only=production",
+    "init-db": "node scripts/init-db.js",
+    "run-migrations": "node scripts/run-migrations.js",
+    "setup-db": "npm run init-db && npm run run-migrations"
   },
   "keywords": [
     "node",
@@ -25,7 +28,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
     "@types/axios": "^0.9.36",
-    "axios": "^1.7.9",
+    "axios": "^1.8.4",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",

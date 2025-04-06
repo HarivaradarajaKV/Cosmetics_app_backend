@@ -1,8 +1,6 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const isProduction = process.env.NODE_ENV === 'production';
-
 // Connection retry configuration
 const MAX_RETRIES = 5;
 const INITIAL_RETRY_DELAY_MS = 1000;
@@ -18,49 +16,58 @@ class Database {
         }
 
         try {
-            // Enhanced configuration for Supabase connection
-            const connectionConfig = isProduction ? {
+            const connectionConfig = {
                 connectionString: process.env.DATABASE_URL,
                 ssl: {
                     rejectUnauthorized: false,
                     sslmode: 'require'
                 },
+                // Enhanced pool configuration for better stability
+                max: parseInt(process.env.PG_POOL_MAX, 10) || 10,
+                min: 0,
+                idleTimeoutMillis: parseInt(process.env.PG_POOL_IDLE_TIMEOUT, 10) || 30000,
+                connectionTimeoutMillis: parseInt(process.env.PG_POOL_CONNECTION_TIMEOUT, 10) || 10000,
+                application_name: 'saranga-ayurveda-backend',
                 keepAlive: true,
                 keepAliveInitialDelayMillis: 10000
-            } : {
-                user: process.env.DB_USER,
-                password: process.env.DB_PASSWORD,
-                host: process.env.DB_HOST,
-                port: process.env.DB_PORT,
-                database: process.env.DB_NAME,
-                ssl: false
             };
 
-            this.pool = new Pool({
+            console.log('Initializing database with config:', {
                 ...connectionConfig,
-                max: isProduction ? 20 : 10, // Reduced max connections
-                min: isProduction ? 2 : 1,   // Minimum connections
-                idleTimeoutMillis: 30000,    // Reduced idle timeout
-                connectionTimeoutMillis: 30000,
-                statement_timeout: 60000,     // 1 minute statement timeout
-                query_timeout: 60000,         // 1 minute query timeout
-                application_name: 'saranga-ayurveda-backend'
+                connectionString: '[REDACTED]',
+                ssl: connectionConfig.ssl
             });
+
+            this.pool = new Pool(connectionConfig);
 
             // Test the connection with retry logic
             let retries = 0;
             while (retries < MAX_RETRIES) {
+                let client;
                 try {
-                    await this.pool.query('SELECT 1');
-                    console.log(`Database connection established successfully in ${process.env.NODE_ENV} mode`);
+                    client = await this.pool.connect();
+                    console.log('Connected to database, testing query...');
+                    const result = await client.query('SELECT current_database() as db, current_user as user, version() as version');
+                    console.log('Database connection test result:', result.rows[0]);
+                    client.release();
+                    console.log('Database connection established successfully');
                     break;
                 } catch (err) {
+                    if (client) client.release();
                     retries++;
+                    console.error('Connection attempt failed:', {
+                        attempt: retries,
+                        error: err.message,
+                        code: err.code,
+                        detail: err.detail,
+                        hint: err.hint
+                    });
                     if (retries === MAX_RETRIES) {
                         throw err;
                     }
-                    console.log(`Connection attempt ${retries} failed, retrying in ${INITIAL_RETRY_DELAY_MS * retries}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, INITIAL_RETRY_DELAY_MS * retries));
+                    const delay = INITIAL_RETRY_DELAY_MS * Math.pow(2, retries - 1);
+                    console.log(`Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
             
@@ -72,7 +79,7 @@ class Database {
                 code: err.code,
                 detail: err.detail,
                 hint: err.hint,
-                position: err.position
+                stack: err.stack
             });
             throw err;
         }
@@ -84,12 +91,13 @@ class Database {
                 error: err.message,
                 code: err.code,
                 detail: err.detail,
-                hint: err.hint,
-                position: err.position
+                hint: err.hint
             });
-            console.log('Attempting to recover from pool error...');
             
-            // Attempt to reconnect
+            // Remove the client from the pool
+            client.release(true);
+            
+            // Attempt to reconnect after a delay
             setTimeout(() => {
                 console.log('Attempting to reconnect to database...');
                 this.initialize().catch(err => {
@@ -99,18 +107,15 @@ class Database {
         });
 
         this.pool.on('connect', () => {
-            console.log(`Database connected successfully in ${process.env.NODE_ENV} mode`);
+            console.log('Database connected successfully');
+        });
+
+        this.pool.on('acquire', () => {
+            console.log('Client acquired from pool');
         });
 
         this.pool.on('remove', () => {
-            console.log('Database connection pool removed');
-            if (isProduction) {
-                setTimeout(() => {
-                    this.initialize().catch(err => {
-                        console.error('Error reconnecting to the database:', err);
-                    });
-                }, INITIAL_RETRY_DELAY_MS);
-            }
+            console.log('Client removed from pool');
         });
     }
 
@@ -118,18 +123,21 @@ class Database {
         if (!this.pool) {
             await this.initialize();
         }
+        const client = await this.pool.connect();
         try {
-            return await this.pool.query(...args);
+            const result = await client.query(...args);
+            return result;
         } catch (err) {
             console.error('Database query error:', {
                 error: err.message,
                 code: err.code,
                 detail: err.detail,
                 hint: err.hint,
-                position: err.position,
                 query: args[0]
             });
             throw err;
+        } finally {
+            client.release();
         }
     }
 
@@ -141,6 +149,4 @@ class Database {
     }
 }
 
-const db = new Database();
-
-module.exports = db; 
+module.exports = new Database(); 
